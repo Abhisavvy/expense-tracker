@@ -1,0 +1,10 @@
+# OS junk files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+
+# Dependencies (if you add npm later)
+node_modules/
