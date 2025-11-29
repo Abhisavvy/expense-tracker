@@ -98,9 +98,26 @@ class App {
             monthSelect.appendChild(allOption);
 
             const current = new Date();
-            for (let i = -11; i <= 1; i++) {
-                const d = new Date(current.getFullYear(), current.getMonth() + i, 1);
-                // Fix: Use local time for YYYY-MM to avoid timezone shifts with toISOString()
+            // Start from December 2025 or current month + 1, whichever is later
+            let startYear = 2025;
+            let startMonth = 11; // December (0-indexed)
+
+            const currentYear = current.getFullYear();
+            const currentMonth = current.getMonth();
+
+            if (currentYear > startYear || (currentYear === startYear && currentMonth > startMonth)) {
+                startYear = currentYear;
+                startMonth = currentMonth + 1;
+            }
+
+            // End at November 2025
+            const endYear = 2025;
+            const endMonth = 10; // November (0-indexed)
+
+            let d = new Date(startYear, startMonth, 1);
+            const endDate = new Date(endYear, endMonth, 1);
+
+            while (d >= endDate) {
                 const year = d.getFullYear();
                 const month = String(d.getMonth() + 1).padStart(2, '0');
                 const value = `${year}-${month}`;
@@ -110,6 +127,9 @@ class App {
                 option.textContent = d.toLocaleString('default', { month: 'long', year: 'numeric' });
                 if (value === this.state.filters.month) option.selected = true;
                 monthSelect.appendChild(option);
+
+                // Go to previous month
+                d.setMonth(d.getMonth() - 1);
             }
         }
     }
@@ -304,6 +324,9 @@ class App {
         document.getElementById('fixed-total').textContent = `₹${fixedTotal.toLocaleString()}`;
         document.getElementById('variable-total').textContent = `₹${variableTotal.toLocaleString()}`;
         document.getElementById('total-spent').textContent = `₹${totalSpent.toLocaleString()}`;
+
+        const totalSaving = (fixedTotal + variableTotal) - totalSpent;
+        document.getElementById('total-saving').textContent = `₹${totalSaving.toLocaleString()}`;
 
         // Top 5 Transactions
         const topList = document.getElementById('top-transactions-list');
