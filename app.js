@@ -1,11 +1,15 @@
 class App {
     constructor() {
+        // Set default month to current month
+        const currentDate = new Date();
+        const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+
         this.state = {
             expenses: [],
             budgets: [],
             categories: [], // Dynamic categories
             filters: {
-                month: 'all',
+                month: currentMonth, // Default to current month instead of 'all'
                 category: 'all',
                 person: 'all'
             },
@@ -105,9 +109,13 @@ class App {
             const currentYear = current.getFullYear();
             const currentMonth = current.getMonth();
 
-            if (currentYear > startYear || (currentYear === startYear && currentMonth > startMonth)) {
-                startYear = currentYear;
-                startMonth = currentMonth + 1;
+            // Always calculate next month from current date
+            const nextMonthDate = new Date(currentYear, currentMonth + 1, 1);
+
+            if (nextMonthDate.getFullYear() > startYear || (nextMonthDate.getFullYear() === startYear && nextMonthDate.getMonth() > startMonth)) {
+                // Use next month as the starting point for the dropdown
+                startYear = nextMonthDate.getFullYear();
+                startMonth = nextMonthDate.getMonth();
             }
 
             // End at November 2025
@@ -238,7 +246,12 @@ class App {
             return;
         }
 
-        expenses.forEach(expense => {
+        // Sort expenses by date in descending order (latest first)
+        const sortedExpenses = [...expenses].sort((a, b) => {
+            return new Date(b.date) - new Date(a.date);
+        });
+
+        sortedExpenses.forEach(expense => {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${expense.date}</td>
