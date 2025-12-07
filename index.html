@@ -78,6 +78,71 @@
                         <h3>Total Saving</h3>
                         <p class="amount" id="total-saving">₹0</p>
                     </div>
+                    <div class="card summary-card prediction-card">
+                        <h3>Spending Prediction</h3>
+                        <p class="amount" id="predicted-spending">₹0</p>
+                        <div class="prediction-status">
+                            <span id="prediction-text">Calculating...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month Comparison Section -->
+                <div class="insights-section" style="margin-top: 30px;">
+                    <div class="section-header">
+                        <h3>Month Comparison</h3>
+                        <p style="color: var(--text-light); margin-top: 8px;">Compare current month with previous month</p>
+                    </div>
+                    <div class="comparison-grid">
+                        <div class="comparison-card card">
+                            <h4>Total Spending</h4>
+                            <div class="comparison-values">
+                                <div class="month-label">Current Month</div>
+                                <div class="current-value" id="comp-current-total">₹0</div>
+                                <div class="month-label" style="margin-top: 12px;">Previous Month</div>
+                                <div class="previous-value" id="comp-previous-total">₹0</div>
+                                <div class="change-indicator" id="comp-total-change">
+                                    <span class="change-text">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="comparison-card card">
+                            <h4>Budget Adherence</h4>
+                            <div class="comparison-values">
+                                <div class="month-label">Current Month</div>
+                                <div class="current-value" id="comp-current-adherence">--%</div>
+                                <div class="month-label" style="margin-top: 12px;">Previous Month</div>
+                                <div class="previous-value" id="comp-previous-adherence">--%</div>
+                                <div class="change-indicator" id="comp-adherence-change">
+                                    <span class="change-text">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="comparison-card card">
+                            <h4>Avg Transaction</h4>
+                            <div class="comparison-values">
+                                <div class="month-label">Current Month</div>
+                                <div class="current-value" id="comp-current-avg">₹0</div>
+                                <div class="month-label" style="margin-top: 12px;">Previous Month</div>
+                                <div class="previous-value" id="comp-previous-avg">₹0</div>
+                                <div class="change-indicator" id="comp-avg-change">
+                                    <span class="change-text">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="comparison-card card">
+                            <h4>Transaction Count</h4>
+                            <div class="comparison-values">
+                                <div class="month-label">Current Month</div>
+                                <div class="current-value" id="comp-current-count">0</div>
+                                <div class="month-label" style="margin-top: 12px;">Previous Month</div>
+                                <div class="previous-value" id="comp-previous-count">0</div>
+                                <div class="change-indicator" id="comp-count-change">
+                                    <span class="change-text">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="chart-section">

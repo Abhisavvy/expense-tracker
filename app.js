@@ -226,6 +226,8 @@ class App {
         this.renderBudgetsTable();
         this.renderSummary(filteredExpenses);
         this.renderCharts(filteredExpenses);
+        this.renderSpendingPrediction();
+        this.renderMonthComparison();
     }
 
     getFilteredExpenses() {
@@ -406,6 +408,376 @@ class App {
         if (percentage <= 100) return CONFIG.COLORS.SPENT_BAR_GRADIENT['90-100'];
         if (percentage <= 110) return CONFIG.COLORS.SPENT_BAR_GRADIENT['100-110'];
         return CONFIG.COLORS.SPENT_BAR_GRADIENT['110+'];
+    }
+
+    renderSpendingPrediction() {
+        const prediction = this.calculateSpendingPrediction();
+
+        const predictionElement = document.getElementById('predicted-spending');
+        const statusElement = document.getElementById('prediction-text');
+
+        if (prediction.predictedTotal > 0) {
+            predictionElement.textContent = `₹${Math.round(prediction.predictedTotal).toLocaleString()}`;
+
+            const percentageOfBudget = prediction.percentageOfBudget;
+            let statusText = '';
+            let statusClass = '';
+
+            if (percentageOfBudget <= 90) {
+                statusText = `🟢 On track (${percentageOfBudget.toFixed(0)}%)`;
+                statusClass = 'on-track';
+            } else if (percentageOfBudget <= 100) {
+                statusText = `🟡 Approaching limit (${percentageOfBudget.toFixed(0)}%)`;
+                statusClass = 'under-budget';
+            } else {
+                statusText = `🔴 Over budget (${percentageOfBudget.toFixed(0)}%)`;
+                statusClass = 'over-budget';
+            }
+
+            // Add confidence indicator
+            const confidenceEmoji = {
+                'high': '✓',
+                'medium': '~',
+                'low': '?'
+            };
+            statusText += ` • ${confidenceEmoji[prediction.confidence]} ${prediction.confidence}`;
+
+            // Add trend indicator
+            if (prediction.trend === 'up') {
+                statusText += ` • ↑ Trending up`;
+            } else if (prediction.trend === 'down') {
+                statusText += ` • ↓ Trending down`;
+            }
+
+            // Add method indicator if using historical data
+            if (prediction.method === 'hybrid' && prediction.historicalMonthsCount > 0) {
+                statusText += ` (using ${prediction.historicalMonthsCount}mo history)`;
+            } else if (prediction.method === 'historical') {
+                statusText += ` (based on history)`;
+            }
+
+            statusElement.textContent = statusText;
+            statusElement.className = `prediction-status ${statusClass}`;
+        } else {
+            predictionElement.textContent = '₹0';
+            statusElement.textContent = 'Add expenses to see prediction';
+            statusElement.className = 'prediction-status';
+        }
+    }
+
+    renderMonthComparison() {
+        const comparison = this.getMonthComparison();
+
+        // Total Spending
+        document.getElementById('comp-current-total').textContent = `₹${Math.round(comparison.current.total).toLocaleString()}`;
+        document.getElementById('comp-previous-total').textContent = `₹${Math.round(comparison.previous.total).toLocaleString()}`;
+
+        const totalChangeEl = document.getElementById('comp-total-change');
+        if (comparison.changes.total !== 0) {
+            const isIncrease = comparison.changes.total > 0;
+            totalChangeEl.className = `change-indicator ${isIncrease ? 'negative' : 'positive'}`;
+            totalChangeEl.querySelector('.change-text').textContent = `${Math.abs(comparison.changes.total).toFixed(1)}%`;
+        } else {
+            totalChangeEl.className = 'change-indicator';
+            totalChangeEl.querySelector('.change-text').textContent = 'No change';
+        }
+
+        // Budget Adherence  
+        document.getElementById('comp-current-adherence').textContent = `${comparison.current.adherence.toFixed(0)}%`;
+        document.getElementById('comp-previous-adherence').textContent = `${comparison.previous.adherence.toFixed(0)}%`;
+
+        const adherenceChangeEl = document.getElementById('comp-adherence-change');
+        if (comparison.changes.adherence !== 0) {
+            const isIncrease = comparison.changes.adherence > 0;
+            adherenceChangeEl.className = `change-indicator ${isIncrease ? 'negative' : 'positive'}`;
+            adherenceChangeEl.querySelector('.change-text').textContent = `${Math.abs(comparison.changes.adherence).toFixed(1)}%`;
+        } else {
+            adherenceChangeEl.className = 'change-indicator';
+            adherenceChangeEl.querySelector('.change-text').textContent = 'No change';
+        }
+
+        // Average Transaction
+        document.getElementById('comp-current-avg').textContent = `₹${Math.round(comparison.current.average).toLocaleString()}`;
+        document.getElementById('comp-previous-avg').textContent = `₹${Math.round(comparison.previous.average).toLocaleString()}`;
+
+        const avgChangeEl = document.getElementById('comp-avg-change');
+        if (comparison.changes.average !== 0) {
+            const isIncrease = comparison.changes.average > 0;
+            avgChangeEl.className = `change-indicator ${isIncrease ? 'negative' : 'positive'}`;
+            avgChangeEl.querySelector('.change-text').textContent = `${Math.abs(comparison.changes.average).toFixed(1)}%`;
+        } else {
+            avgChangeEl.className = 'change-indicator';
+            avgChangeEl.querySelector('.change-text').textContent = 'No change';
+        }
+
+        //Transaction Count
+        document.getElementById('comp-current-count').textContent = comparison.current.count;
+        document.getElementById('comp-previous-count').textContent = comparison.previous.count;
+
+        const countChangeEl = document.getElementById('comp-count-change');
+        if (comparison.changes.count !== 0) {
+            const isIncrease = comparison.changes.count > 0;
+            countChangeEl.className = `change-indicator ${isIncrease ? 'positive' : 'negative'}`;
+            countChangeEl.querySelector('.change-text').textContent = `${Math.abs(comparison.changes.count).toFixed(1)}%`;
+        } else {
+            countChangeEl.className = 'change-indicator';
+            countChangeEl.querySelector('.change-text').textContent = 'No change';
+        }
+    }
+
+    calculateSpendingPrediction() {
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        const currentDay = currentDate.getDate();
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+
+        // Get expenses for current month
+        const currentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        const monthExpenses = this.state.expenses.filter(e => e.date.startsWith(currentMonthStr));
+        const totalSpent = monthExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+        // Get last 3 months of historical data
+        const historicalMonths = [];
+        for (let i = 1; i <= 3; i++) {
+            let histYear = currentYear;
+            let histMonth = currentMonth - i;
+            if (histMonth <= 0) {
+                histMonth += 12;
+                histYear--;
+            }
+            const histMonthStr = `${histYear}-${String(histMonth).padStart(2, '0')}`;
+            const histExpenses = this.state.expenses.filter(e => e.date.startsWith(histMonthStr));
+            const histTotal = histExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+            if (histTotal > 0) {
+                historicalMonths.push({
+                    monthStr: histMonthStr,
+                    total: histTotal,
+                    expenseCount: histExpenses.length
+                });
+            }
+        }
+
+        const totalBudget = this.state.budgets.reduce((sum, b) => sum + b.amount, 0);
+
+        // If no current data and no historical data
+        if (monthExpenses.length === 0 && historicalMonths.length === 0) {
+            return {
+                predictedTotal: 0,
+                totalBudget,
+                currentSpent: 0,
+                dailyAverage: 0,
+                daysElapsed: currentDay,
+                daysRemaining: daysInMonth - currentDay,
+                variance: 0,
+                percentageOfBudget: 0,
+                confidence: 'low',
+                method: 'none',
+                trend: 'neutral'
+            };
+        }
+
+        let predictedTotal = 0;
+        let confidence = 'low';
+        let method = 'current';
+        let trend = 'neutral';
+
+        // Calculate historical average if available
+        let historicalAverage = 0;
+        if (historicalMonths.length > 0) {
+            historicalAverage = historicalMonths.reduce((sum, m) => sum + m.total, 0) / historicalMonths.length;
+        }
+
+        // If we have current month data, calculate current-based prediction
+        if (monthExpenses.length > 0 && currentDay > 0) {
+            // Group expenses by day
+            const expensesByDay = {};
+            monthExpenses.forEach(e => {
+                const day = parseInt(e.date.split('-')[2]);
+                if (!expensesByDay[day]) expensesByDay[day] = 0;
+                expensesByDay[day] += e.amount;
+            });
+
+            // Calculate weighted average (recent days weighted more heavily)
+            let weightedSum = 0;
+            let totalWeight = 0;
+
+            for (let day = 1; day <= currentDay; day++) {
+                const amount = expensesByDay[day] || 0;
+                let weight = 1;
+                if (currentDay - day < 3) weight = 3;
+                else if (currentDay - day < 7) weight = 2;
+
+                weightedSum += amount * weight;
+                totalWeight += weight;
+            }
+
+            const weightedDailyAverage = totalWeight > 0 ? weightedSum / totalWeight : 0;
+
+            // Weekday vs weekend analysis
+            let weekdayTotal = 0, weekendTotal = 0;
+            let weekdayCount = 0, weekendCount = 0;
+
+            for (let day = 1; day <= currentDay; day++) {
+                const date = new Date(currentYear, currentMonth - 1, day);
+                const dayOfWeek = date.getDay();
+                const amount = expensesByDay[day] || 0;
+
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    weekendTotal += amount;
+                    weekendCount++;
+                } else {
+                    weekdayTotal += amount;
+                    weekdayCount++;
+                }
+            }
+
+            const weekdayAvg = weekdayCount > 0 ? weekdayTotal / weekdayCount : weightedDailyAverage;
+            const weekendAvg = weekendCount > 0 ? weekendTotal / weekendCount : weightedDailyAverage;
+
+            // Count remaining weekdays and weekends
+            let remainingWeekdays = 0, remainingWeekends = 0;
+
+            for (let day = currentDay + 1; day <= daysInMonth; day++) {
+                const date = new Date(currentYear, currentMonth - 1, day);
+                const dayOfWeek = date.getDay();
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    remainingWeekends++;
+                } else {
+                    remainingWeekdays++;
+                }
+            }
+
+            // Current month prediction
+            let currentBasedPrediction;
+            if (weekdayCount >= 3 && weekendCount >= 1) {
+                currentBasedPrediction = totalSpent + (weekdayAvg * remainingWeekdays) + (weekendAvg * remainingWeekends);
+            } else {
+                currentBasedPrediction = totalSpent + (weightedDailyAverage * (daysInMonth - currentDay));
+            }
+
+            // Hybrid prediction with historical data
+            if (historicalAverage > 0) {
+                // Dynamic weighting based on days elapsed
+                // Day 1-3: 80% historical, 20% current
+                // Day 7: 50% historical, 50% current
+                // Day 15: 25% historical, 75% current
+                // Day 20+: 10% historical, 90% current
+                let historicalWeight = 0.8;
+                if (currentDay >= 20) historicalWeight = 0.1;
+                else if (currentDay >= 15) historicalWeight = 0.25;
+                else if (currentDay >= 10) historicalWeight = 0.4;
+                else if (currentDay >= 7) historicalWeight = 0.5;
+                else if (currentDay >= 4) historicalWeight = 0.65;
+
+                const currentWeight = 1 - historicalWeight;
+
+                predictedTotal = (historicalAverage * historicalWeight) + (currentBasedPrediction * currentWeight);
+                method = 'hybrid';
+
+                // Detect trend
+                const projectedCurrentPace = (totalSpent / currentDay) * daysInMonth;
+                if (projectedCurrentPace > historicalAverage * 1.1) {
+                    trend = 'up';
+                } else if (projectedCurrentPace < historicalAverage * 0.9) {
+                    trend = 'down';
+                }
+            } else {
+                predictedTotal = currentBasedPrediction;
+                method = 'current';
+            }
+
+            // Calculate confidence
+            const dataPoints = currentDay + (historicalMonths.length * 5); // Historical months add to confidence
+            if (currentDay >= 7 && dataPoints >= 15) {
+                confidence = 'high';
+            } else if (currentDay >= 3 && dataPoints >= 8) {
+                confidence = 'medium';
+            }
+        } else if (historicalAverage > 0) {
+            // No current data yet, use historical average
+            predictedTotal = historicalAverage;
+            method = 'historical';
+            confidence = historicalMonths.length >= 3 ? 'medium' : 'low';
+        }
+
+        return {
+            predictedTotal,
+            totalBudget,
+            currentSpent: totalSpent,
+            dailyAverage: currentDay > 0 ? totalSpent / currentDay : 0,
+            historicalAverage,
+            daysElapsed: currentDay,
+            daysRemaining: daysInMonth - currentDay,
+            variance: predictedTotal - totalBudget,
+            percentageOfBudget: totalBudget > 0 ? (predictedTotal / totalBudget) * 100 : 0,
+            confidence,
+            method,
+            trend,
+            historicalMonthsCount: historicalMonths.length
+        };
+    }
+
+    getMonthComparison() {
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+
+        // Previous month
+        let prevYear = currentYear;
+        let prevMonth = currentMonth - 1;
+        if (prevMonth === 0) {
+            prevMonth = 12;
+            prevYear--;
+        }
+
+        const currentMonthStr = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+
+        // Get expenses for both months
+        const currentExpenses = this.state.expenses.filter(e => e.date.startsWith(currentMonthStr));
+        const prevExpenses = this.state.expenses.filter(e => e.date.startsWith(prevMonthStr));
+
+        // Calculate totals
+        const currentTotal = currentExpenses.reduce((sum, e) => sum + e.amount, 0);
+        const prevTotal = prevExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+        //  Calculate average transaction amounts
+        const currentAvg = currentExpenses.length > 0 ? currentTotal / currentExpenses.length : 0;
+        const prevAvg = prevExpenses.length > 0 ? prevTotal / prevExpenses.length : 0;
+
+        // Calculate budget adherence (spending vs budget as percentage)
+        const totalBudget = this.state.budgets.reduce((sum, b) => sum + b.amount, 0);
+        const currentAdherence = totalBudget > 0 ? (currentTotal / totalBudget) * 100 : 0;
+        const prevAdherence = totalBudget > 0 ? (prevTotal / totalBudget) * 100 : 0;
+
+        // Calculate changes
+        const totalChange = prevTotal > 0 ? ((currentTotal - prevTotal) / prevTotal) * 100 : 0;
+        const avgChange = prevAvg > 0 ? ((currentAvg - prevAvg) / prevAvg) * 100 : 0;
+        const adherenceChange = prevAdherence > 0 ? ((currentAdherence - prevAdherence) / prevAdherence) * 100 : 0;
+        const countChange = prevExpenses.length > 0 ? ((currentExpenses.length - prevExpenses.length) / prevExpenses.length) * 100 : 0;
+
+        return {
+            current: {
+                total: currentTotal,
+                average: currentAvg,
+                count: currentExpenses.length,
+                adherence: currentAdherence
+            },
+            previous: {
+                total: prevTotal,
+                average: prevAvg,
+                count: prevExpenses.length,
+                adherence: prevAdherence
+            },
+            changes: {
+                total: totalChange,
+                average: avgChange,
+                count: countChange,
+                adherence: adherenceChange
+            }
+        };
     }
 
     renderCharts(expenses) {
